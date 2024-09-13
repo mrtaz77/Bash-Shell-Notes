@@ -8,12 +8,11 @@ remove_spaces() {
 
 check_positive_number() {
     local number="$1"
-
+	local type="$2"
     if ! [[ "$number" =~ ^[0-9][0-9]*$ ]]; then
-        echo "Error: '$number' is not a valid positive whole number."
+        echo "Error: '$type' is not a valid positive whole number."
         return 1
     fi
-
     return 0
 }
 
@@ -87,13 +86,13 @@ done
 
 full_score=$(remove_spaces "${lines[3]}")
 
-if ! check_positive_number "$full_score"; then
+if ! check_positive_number "$full_score" "Full Score" ; then
     exit 1
 fi
 
 unmatched_penalty=$(remove_spaces "${lines[4]}")
 
-if ! check_positive_number "$unmatched_penalty"; then
+if ! check_positive_number "$unmatched_penalty" "Penalty for Unmatched/Non-existent Output" ; then
     exit 1
 fi
 
@@ -108,22 +107,37 @@ sid_range="${lines[6]}"
 
 IFS=' ' read -r -a sid_s <<< "$sid_range"
 
-sid_low="${sid_s[0]}"
-sid_high="${sid_s[1]}"
+sid_low=$(remove_spaces "${sid_s[0]}")
+sid_high=$(remove_spaces "${sid_s[1]}")
 
-if ! check_positive_number "$sid_low"; then
+if ! check_positive_number "$sid_low" "First Student ID" ; then
 	exit 1
-elif ! check_positive_number "$sid_high"; then
+elif ! check_positive_number "$sid_high" "Last Student ID" ; then
 	exit 1
 elif [[ "$sid_low" -gt "$sid_high" ]]; then
-	echo "Invalid Student ID range; lower limit is greater than upper limit"
+	echo "Invalid Student ID range; first Student ID is greater than last Student ID"
 fi
 
-expected_output=$(remove_spaces "${lines[7]}")
+expected_output_file=$(remove_spaces "${lines[7]}")
 
-if ! find ".$expected_output" -maxdepth 0 -type f > /dev/null 2>&1; then
-    echo "Error: File '$expected_output' does not exist."
+if ! find ".$expected_output_file" -maxdepth 0 -type f > /dev/null 2>&1; then
+    echo "Error: File '$expected_output_file' does not exist."
     exit 1
 fi
+
+violation_penalty=$(remove_spaces "${lines[8]}")
+
+if ! check_positive_number "$violation_penalty" "Penalty for Submission Guidelines Violations" ; then
+    exit 1
+fi
+
+plagiarism_analysis_file=$(remove_spaces "${lines[9]}")
+
+plagiarism_penalty=$(remove_spaces "${lines[10]}")
+
+if ! check_positive_number "$plagiarism_penalty" "Plagiarism Penalty" ; then
+    exit 1
+fi
+
 
 
