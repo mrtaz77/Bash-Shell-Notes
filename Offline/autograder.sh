@@ -16,6 +16,11 @@ check_positive_number() {
     return 0
 }
 
+get_file_extension() {
+	local filename="$1"
+	file_extension=$(echo "$filename" | rev | cut -d. -f1 | rev)
+	echo "$file_extension"
+}
 
 # Check for correct number of arguments
 if [ "$#" -ne 2 ]; then
@@ -49,38 +54,42 @@ if [[ "$use_archive" != "true" && "$use_archive" != "false" ]]; then
 fi
 
 valid_archived_formats=("zip" "rar" "tar")
+allowed_valid_archived_formats=()
 
-allowed_archived_formats="${lines[1]}"
+if [[ "$use_archive" == "true" ]]; then
+    allowed_archived_formats="${lines[1]}"
 
-IFS=' ' read -r -a archive_formats <<< "$allowed_archived_formats"
+    IFS=' ' read -ra archive_formats <<< "$allowed_archived_formats"
 
-for i in "${!archive_formats[@]}"; do
-    archive_formats[$i]=$(remove_spaces "${archive_formats[$i]}")
-done
-
-for format in "${archive_formats[@]}"; do
-    if [[ ! " ${valid_archived_formats[*]} " =~ " ${format} " ]]; then
-        echo "Invalid Archive Format: $format"
-        echo "Usage: Valid formats are zip, rar, tar"
-        exit 1
-    fi
-done
+    for format in "${archive_formats[@]}"; do
+        format=$(remove_spaces "$format")
+        
+        if [[ " ${valid_archived_formats[*]} " =~ " ${format} " ]]; then
+            allowed_valid_archived_formats+=("$format")
+        else
+            echo "Invalid Archive Format: $format"
+            echo "Usage: Valid formats are zip, rar, tar"
+            exit 1
+        fi
+    done
+fi
 
 valid_programming_languages=("c" "cpp" "python" "sh")
 
 allowed_programming_languages="${lines[2]}"
 
-IFS=' ' read -r -a programming_languages <<< "$allowed_programming_languages"
+allowed_valid_programming_languages=()
 
-for i in "${!programming_languages[@]}"; do
-    programming_languages[$i]=$(remove_spaces "${programming_languages[$i]}")
-done
+IFS=' ' read -ra programming_languages <<< "$allowed_programming_languages"
 
 for language in "${programming_languages[@]}"; do
-    if [[ ! " ${valid_programming_languages[*]} " =~ " ${language} " ]]; then
-        echo "Invalid Programming Language: $language"
-        echo "Usage: Valid programming languages are c, cpp, python, sh"
-        exit 1
+	language=$(remove_spaces "$language")
+    if [[ " ${valid_programming_languages[*]} " =~ " ${language} " ]]; then
+		allowed_valid_programming_languages+=("$language")
+	else
+		echo "Invalid Programming Language: $language"
+		echo "Usage: Valid formats are c, cpp, python and sh"
+		exit 1
     fi
 done
 
@@ -90,9 +99,9 @@ if ! check_positive_number "$full_score" "Full Score" ; then
     exit 1
 fi
 
-unmatched_penalty=$(remove_spaces "${lines[4]}")
+unmatched_non_existent_penalty=$(remove_spaces "${lines[4]}")
 
-if ! check_positive_number "$unmatched_penalty" "Penalty for Unmatched/Non-existent Output" ; then
+if ! check_positive_number "$unmatched_non_existent_penalty" "Penalty for Unmatched/Non-existent Output" ; then
     exit 1
 fi
 
@@ -138,6 +147,3 @@ plagiarism_penalty=$(remove_spaces "${lines[10]}")
 if ! check_positive_number "$plagiarism_penalty" "Plagiarism Penalty" ; then
     exit 1
 fi
-
-
-
