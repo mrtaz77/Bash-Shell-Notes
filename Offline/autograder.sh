@@ -97,5 +97,10 @@ if ! check_positive_number "$unmatched_penalty"; then
     exit 1
 fi
 
+working_dir=$(remove_spaces "${lines[5]}")
 
+if ! find ".$working_dir" -maxdepth 0 -type d > /dev/null 2>&1; then
+    echo "Error: Directory '.$working_dir' does not exist."
+    exit 1
+fi
 
