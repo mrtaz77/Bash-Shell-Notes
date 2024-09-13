@@ -28,3 +28,13 @@ if [ ! -f "$file" ]; then
 	exit 1
 fi
 
+IFS=$'\n' read -d '' -r -a lines < $file
+
+use_archive=$(remove_spaces "${lines[0]}")
+
+if [[ "$use_archive" != "true" && "$use_archive" != "false" ]]; then
+	echo "Invalid Use Archive setting: $use_archive"
+	echo "Usage: 'true' or 'false'"
+	exit 1
+fi
+
