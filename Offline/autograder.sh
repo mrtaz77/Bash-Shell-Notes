@@ -38,3 +38,38 @@ if [[ "$use_archive" != "true" && "$use_archive" != "false" ]]; then
 	exit 1
 fi
 
+valid_archived_formats=("zip" "rar" "tar")
+
+allowed_archived_formats="${lines[1]}"
+
+IFS=' ' read -r -a archive_formats <<< "$allowed_archived_formats"
+
+for i in "${!archive_formats[@]}"; do
+    archive_formats[$i]=$(remove_spaces "${archive_formats[$i]}")
+done
+
+for format in "${archive_formats[@]}"; do
+    if [[ ! " ${valid_archived_formats[*]} " =~ " ${format} " ]]; then
+        echo "Invalid Archive Format: $format"
+        echo "Usage: Valid formats are zip, rar, tar"
+        exit 1
+    fi
+done
+
+valid_programming_languages=("c" "cpp" "python" "sh")
+
+allowed_programming_languages="${lines[2]}"
+
+IFS=' ' read -r -a programming_languages <<< "$allowed_programming_languages"
+
+for i in "${!programming_languages[@]}"; do
+    programming_languages[$i]=$(remove_spaces "${programming_languages[$i]}")
+done
+
+for language in "${programming_languages[@]}"; do
+    if [[ ! " ${valid_programming_languages[*]} " =~ " ${language} " ]]; then
+        echo "Invalid Programming Language: $language"
+        echo "Usage: Valid programming languages are c, cpp, python, sh"
+        exit 1
+    fi
+done
