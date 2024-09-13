@@ -10,7 +10,7 @@ check_positive_number() {
     local number="$1"
 
     if ! [[ "$number" =~ ^[0-9][0-9]*$ ]]; then
-        echo "Error: Total Marks '$number' is not a valid positive whole number."
+        echo "Error: '$number' is not a valid positive whole number."
         return 1
     fi
 
@@ -103,4 +103,20 @@ if ! find ".$working_dir" -maxdepth 0 -type d > /dev/null 2>&1; then
     echo "Error: Directory '.$working_dir' does not exist."
     exit 1
 fi
+
+sid_range="${lines[6]}"
+
+IFS=' ' read -r -a sid_s <<< "$sid_range"
+
+sid_low="${sid_s[0]}"
+sid_high="${sid_s[1]}"
+
+if ! check_positive_number "$sid_low"; then
+	exit 1
+elif ! check_positive_number "$sid_high"; then
+	exit 1
+elif [[ "$sid_low" -gt "$sid_high" ]]; then
+	echo "Invalid Student ID range; lower limit is greater than upper limit"
+fi
+
 
