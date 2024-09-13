@@ -1,7 +1,0 @@
-true
-rar zip
-c cpp
-100
-5
-/home/assignment
-2005001 2005121
