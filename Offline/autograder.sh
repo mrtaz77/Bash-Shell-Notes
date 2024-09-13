@@ -100,7 +100,7 @@ fi
 working_dir=$(remove_spaces "${lines[5]}")
 
 if ! find ".$working_dir" -maxdepth 0 -type d > /dev/null 2>&1; then
-    echo "Error: Directory '.$working_dir' does not exist."
+    echo "Error: Directory '$working_dir' does not exist."
     exit 1
 fi
 
@@ -117,6 +117,13 @@ elif ! check_positive_number "$sid_high"; then
 	exit 1
 elif [[ "$sid_low" -gt "$sid_high" ]]; then
 	echo "Invalid Student ID range; lower limit is greater than upper limit"
+fi
+
+expected_output=$(remove_spaces "${lines[7]}")
+
+if ! find ".$expected_output" -maxdepth 0 -type f > /dev/null 2>&1; then
+    echo "Error: File '$expected_output' does not exist."
+    exit 1
 fi
 
 
