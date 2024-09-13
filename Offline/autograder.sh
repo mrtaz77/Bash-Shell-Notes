@@ -6,6 +6,17 @@ remove_spaces() {
     echo "$result"
 }
 
+check_positive_number() {
+    local number="$1"
+
+    if ! [[ "$number" =~ ^[0-9][0-9]*$ ]]; then
+        echo "Error: Total Marks '$number' is not a valid positive whole number."
+        return 1
+    fi
+
+    return 0
+}
+
 
 # Check for correct number of arguments
 if [ "$#" -ne 2 ]; then
@@ -73,3 +84,18 @@ for language in "${programming_languages[@]}"; do
         exit 1
     fi
 done
+
+full_score=$(remove_spaces "${lines[3]}")
+
+if ! check_positive_number "$full_score"; then
+    exit 1
+fi
+
+unmatched_penalty=$(remove_spaces "${lines[4]}")
+
+if ! check_positive_number "$unmatched_penalty"; then
+    exit 1
+fi
+
+
+
