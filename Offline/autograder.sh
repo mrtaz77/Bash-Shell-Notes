@@ -107,10 +107,12 @@ fi
 
 working_dir=$(remove_spaces "${lines[5]}")
 
-if ! find ".$working_dir" -maxdepth 0 -type d > /dev/null 2>&1; then
+if ! find "$working_dir" -maxdepth 0 -type d > /dev/null 2>&1; then
     echo "Error: Directory '$working_dir' does not exist."
     exit 1
 fi
+
+echo "$working_dir"
 
 sid_range="${lines[6]}"
 
@@ -147,3 +149,116 @@ plagiarism_penalty=$(remove_spaces "${lines[10]}")
 if ! check_positive_number "$plagiarism_penalty" "Plagiarism Penalty" ; then
     exit 1
 fi
+
+check_programming_language() {
+    local file_extension="$1"
+    if [[ "$file_extension" == "py" ]]; then
+        if [[ " ${allowed_valid_programming_languages[*]} " =~ " python " ]]; then
+            return 1
+        else
+            return 0
+        fi
+    fi
+
+    for language in "${allowed_valid_programming_languages[@]}"; do
+        if [[ "$file_extension" == "$language" ]]; then
+            return 1
+        fi
+    done
+    
+    return 0 
+}
+
+check_archive_format() {
+    local file_extension="$1"
+	for format in "${allowed_valid_archived_formats[@]}"; do
+        if [[ "$file_extension" == "$format" ]]; then
+            return 0
+        fi
+    done
+    
+    return 1
+}
+
+handle_extracted_files() {
+	local sid="$1"
+    local working_dir="$2"
+    local extracted_dir=".$working_dir/$sid"
+
+    if [ -d "$extracted_dir" ]; then
+        local submission_file=$(find "$extracted_dir" -maxdepth 1 -name "$sid.*" -print -quit)
+        if [ -n "$submission_file" ]; then
+            file_extension=$(get_file_extension "$submission_file")
+            check_programming_language "$file_extension"
+            if [ $? -eq 1 ]; then
+                echo "Valid submission for Student ID: $sid with language: $file_extension"
+            else
+                echo "Invalid programming language for Student ID: $sid. Expected one of: ${allowed_valid_programming_languages[*]}."
+            fi
+        else
+            echo "No valid submission file found in the extracted directory for Student ID: $sid."
+        fi
+    else
+        echo "No directory created for Student ID: $sid after extraction."
+    fi
+}
+
+for (( sid = sid_low; sid <= sid_high; sid++ )); do
+	if [[ "$use_archive" == "true" ]]; then
+		archive_file=$(find ".$working_dir" -maxdepth 1 -name "$sid.*" -print -quit)
+		if [ -z "$archive_file" ]; then
+            echo "No archive file found for Student ID: $sid"
+            continue
+        fi
+
+        file_extension=$(get_file_extension "$archive_file")
+
+        if ! check_archive_format "$file_extension"; then
+            echo "Invalid archive format for Student ID: $sid. Expected one of: ${allowed_valid_archived_formats[*]}."
+            continue
+        fi
+
+        case "$file_extension" in
+            zip)
+                unzip "$archive_file" -d ".$working_dir" > /dev/null
+                ;;
+            rar)
+                unrar x "$archive_file" ".$working_dir" > /dev/null
+                ;;
+            tar)
+                tar -xvf "$archive_file" -C ".$working_dir" > /dev/null
+                ;;
+        esac
+
+        handle_extracted_files "$sid" "$working_dir"
+	else
+		sid_dir=".$working_dir/$sid"
+		if [ ! -d "$sid_dir" ]; then
+			mkdir -p "$sid_dir"
+		fi
+
+		submission_file=$(find ".$working_dir" -maxdepth 1 -name "$sid.*" -print -quit)
+
+		if [ -z "$submission_file" ]; then
+			echo "No submission file found for Student ID: $sid"
+			continue
+		fi
+
+		mv "$submission_file" "$sid_dir/" 2>/dev/null
+
+		if [ $? -ne 0 ]; then
+			echo "Error moving submission file for Student ID: $sid"
+			continue
+		fi
+
+		file_extension=$(get_file_extension "$submission_file")
+
+		check_programming_language "$file_extension"
+		if [ $? -eq 1 ]; then
+			echo "Valid submission for Student ID: $sid with language: $file_extension"
+		else
+			echo "Invalid programming language for Student ID: $sid. Expected one of: ${allowed_valid_programming_languages[*]}."
+			continue
+		fi
+	fi
+done
