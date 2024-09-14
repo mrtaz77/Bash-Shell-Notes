@@ -157,8 +157,8 @@ make_marks_csv() {
 	echo "$column_names" > marks.csv
 }
 
-issues="./issues"
-checked="./checked"
+issues="$working_dir/issues"
+checked="$working_dir/checked"
 
 create_or_clear_dir() {
     local dir="$1"
@@ -229,7 +229,7 @@ check_archive_format() {
     return 1
 }
 
-marks_deducted_for_plagiarism() {
+check_for_plagiarism() {
     local sid="$1"
 
     if grep -qw "$sid" "$plagiarism_analysis_file"; then
@@ -252,20 +252,21 @@ process_submission_file() {
 
         local output_file="$submission_dir/${sid}_output.txt"
         local deductions=$(compare_output "$output_file")
-        local final_marks=$((total_marks - deductions - submission_rules_violations))
-        local deduction_for_plagiarism=$(marks_deducted_for_plagiarism "$sid")
-        local total_deductions=$((deductions + submission_rules_violations + deduction_for_plagiarism))
+		local marks=0
+		marks=$((total_marks - deductions))
+		echo -n "$marks," >> marks.csv
 
-        echo -n "$final_marks,$total_deductions," >> marks.csv
+		local deduction_for_plagiarism=$(check_for_plagiarism "$sid")
 
-        if [[ $deductions -ne 0 ]]; then
-            add_to_remarks "'unmatched/non-existent output'"
-        fi
+        echo -n "$submission_rules_violations," >> marks.csv
+
+		final_marks=$((marks - submission_rules_violations))
+
         if [[ $deduction_for_plagiarism -ne 0 ]]; then
 			echo -n "-$plagiarism_penalty," >> marks.csv 
             add_to_remarks "'plagiarism detected'"
 		else
-			echo -n "$total_marks," >> marks.csv
+			echo -n "$final_marks," >> marks.csv
         fi
     else
         handle_not_allowed_programming_language
@@ -397,6 +398,7 @@ run_submission_file() {
 
 compare_output() {
     local generated_output_file="$1"
+    local total_deductions=0
 
     if [ ! -f "$generated_output_file" ]; then
         echo "Generated output file '$generated_output_file' not found. Deducting full marks."
@@ -404,18 +406,28 @@ compare_output() {
         return 0
     fi
 
-    line_exists() {
-        local line="$1"
-        local file="$2"
-        grep -Fxq "$line" "$file"
+    process_file() {
+        local file="$1"
+        local result=""
+
+        while IFS= read -r line; do
+            # Remove trailing CRLF or LF
+            result+="${line//[$'\r']/}"
+            result+=$'\n'
+        done < "$file"
+
+        echo "$result"
     }
 
-    local total_deductions=0
-    while IFS= read -r expected_line; do
-        if ! line_exists "$expected_line" "$generated_output_file"; then
-            total_deductions=$((total_deductions + unmatched_non_existent_penalty))
-        fi
-    done < "$expected_output_file"
+    processed_expected=$(process_file "$expected_output_file")
+    processed_generated=$(process_file "$generated_output_file")
+
+    diff_output=$(diff <(echo "$processed_expected") <(echo "$processed_generated"))
+
+    missing_lines=$(echo "$diff_output" | grep '^<' | wc -l)
+
+
+    total_deductions=$((missing_lines * unmatched_non_existent_penalty))
 
     echo "$total_deductions"
     return 0
@@ -426,14 +438,14 @@ add_new_line_to_marks_csv() {
 }
 
 handle_missing_submission() {
-	echo -n "0,0,$total_marks,'missing submission'" >> marks.csv
+	echo -n "0,0,0,'missing submission'" >> marks.csv
 	add_new_line_to_marks_csv
 }
 
 handle_not_allowed_archive_format() {
 	add_to_submission_rules_violations
 	add_to_remarks "'issue case #2'"
-	echo -n "-$submission_rules_violations,$submission_rules_violations,$total_marks,$remarks" >> marks.csv
+	echo -n "0,$submission_rules_violations,-$submission_rules_violations,$remarks" >> marks.csv
 	clear_remarks
 	clear_submission_rules_violations
 	add_new_line_to_marks_csv
@@ -442,7 +454,7 @@ handle_not_allowed_archive_format() {
 handle_not_allowed_programming_language() {
 	add_to_submission_rules_violations
 	add_to_remarks "'issue case #3'"
-	echo -n "-$submission_rules_violations,$submission_rules_violations,$total_marks," >> marks.csv
+	echo -n "0,$submission_rules_violations,-$submission_rules_violations," >> marks.csv
 	clear_submission_rules_violations
 }
 
@@ -451,7 +463,7 @@ is_valid_sid() {
     local basename_no_ext="${basename%.*}"
     local expected_output_basename_no_ext="$(basename "${expected_output_file%.*}")"
     local plagiarism_analysis_basename_no_ext="$(basename "${plagiarism_analysis_file%.*}")"
-    if [[ "$basename_no_ext" == "$expected_output_basename_no_ext" || "$basename_no_ext" == "$plagiarism_analysis_basename_no_ext" ]]; then
+    if [[ "$basename_no_ext" == "$expected_output_basename_no_ext" || "$basename_no_ext" == "$plagiarism_analysis_basename_no_ext" || "$basename_no_ext" == "issues" || "$basename_no_ext" == "checked" ]]; then
         return 0
     fi
     if [[ "$basename_no_ext" =~ ^[0-9]+$ ]] && (( basename_no_ext >= sid_low && basename_no_ext <= sid_high )); then
@@ -467,7 +479,7 @@ handle_invalid_entries() {
             local basename=$(basename "$entry")
             local basename_no_ext="${basename%.*}"
             if ! is_valid_sid "$basename"; then
-                echo "$basename_no_ext,-$violation_penalty,$violation_penalty,$total_marks,'issue case #5'" >> marks.csv
+                echo "$basename_no_ext,0,$violation_penalty,-$violation_penalty,'issue case #5'" >> marks.csv
             fi
         fi
     done
@@ -535,6 +547,7 @@ for (( sid = sid_low; sid <= sid_high; sid++ )); do
 	fi
 	echo -n "$remarks" >> marks.csv
 	clear_remarks
+	clear_submission_rules_violations
 	add_new_line_to_marks_csv
 done
 
@@ -547,14 +560,12 @@ move_directories() {
     while IFS=, read -r sid final_marks total_deductions total_marks remarks; do
         remarks=$(echo "$remarks" | xargs)
         if is_sid_in_range "$sid"; then
-            if [[ "$remarks" =~ issue\ case\ #[134] ]]; then
+            if [[ "$remarks" =~ issue\ case\ #3 ]]; then
                 if [ -d "$working_dir/$sid" ]; then
                     mv "$working_dir/$sid" "$issues/"
                 fi
-            elif [[ "$remarks" =~ issue\ case\ #2 ]]; then
-                if ls "$working_dir/$sid"* 1> /dev/null 2>&1; then
-                    mv "$working_dir/$sid"* "$issues/"
-                fi
+            elif [[ "$remarks" =~ issue\ case\ #[25] ]]; then
+                continue
             else
                 if [ -d "$working_dir/$sid" ]; then
                     mv "$working_dir/$sid" "$checked/"
