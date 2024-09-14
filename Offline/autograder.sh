@@ -155,6 +155,13 @@ if ! check_positive_number "$plagiarism_penalty" "Plagiarism Penalty" ; then
     exit 1
 fi
 
+make_marks_csv() {
+	column_names="id,marks,marks_deducted,total_marks,remarks"
+	echo "$column_names" > marks.csv
+}
+
+make_marks_csv
+
 check_programming_language() {
     local file_extension="$1"
     if [[ "$file_extension" == "py" ]]; then
