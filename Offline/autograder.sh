@@ -157,6 +157,22 @@ make_marks_csv() {
 	echo "$column_names" > marks.csv
 }
 
+issues="./issues"
+checked="./checked"
+
+create_or_clear_dir() {
+    local dir="$1"
+    
+    if [ -d "$dir" ]; then
+        rm -rf "$dir"/*
+    else
+        mkdir -p "$dir"
+    fi
+}
+
+create_or_clear_dir "$issues"
+create_or_clear_dir "$checked"
+
 make_marks_csv
 submission_rules_violations=0
 remarks=""
@@ -499,7 +515,7 @@ for (( sid = sid_low; sid <= sid_high; sid++ )); do
 					mkdir -p ".$working_dir/$sid"
 					unzip "$archive_file" -d ".$working_dir/$sid" > /dev/null
 					add_to_submission_rules_violations
-					add_to_remarks "'issue case#4'"
+					add_to_remarks "'issue case #4'"
 				fi
 				;;
 			rar)
@@ -509,7 +525,7 @@ for (( sid = sid_low; sid <= sid_high; sid++ )); do
 					mkdir -p ".$working_dir/$sid"
 					unrar x "$archive_file" ".$working_dir/$sid" > /dev/null
 					add_to_submission_rules_violations
-					add_to_remarks "'issue case#4'"
+					add_to_remarks "'issue case #4'"
 				fi
 				;;
 			tar)
@@ -519,7 +535,7 @@ for (( sid = sid_low; sid <= sid_high; sid++ )); do
 					mkdir -p ".$working_dir/$sid"
 					tar -xvf "$archive_file" -C ".$working_dir/$sid" > /dev/null
 					add_to_submission_rules_violations
-					add_to_remarks "'issue case#4'"
+					add_to_remarks "'issue case #4'"
 				fi
 				;;
 		esac
@@ -532,3 +548,31 @@ for (( sid = sid_low; sid <= sid_high; sid++ )); do
 	clear_remarks
 	add_new_line_to_marks_csv
 done
+
+is_sid_in_range() {
+    local sid="$1"
+    [[ "$sid" -ge "$sid_low" && "$sid" -le "$sid_high" ]]
+}
+
+move_directories() {
+    while IFS=, read -r sid final_marks total_deductions total_marks remarks; do
+        remarks=$(echo "$remarks" | xargs)
+        if is_sid_in_range "$sid"; then
+            if [[ "$remarks" =~ issue\ case\ #[134] ]]; then
+                if [ -d ".$working_dir/$sid" ]; then
+                    mv ".$working_dir/$sid" "$issues/"
+                fi
+            elif [[ "$remarks" =~ issue\ case\ #2 ]]; then
+                if ls ".$working_dir/$sid"* 1> /dev/null 2>&1; then
+                    mv ".$working_dir/$sid"* "$issues/"
+                fi
+            else
+                if [ -d ".$working_dir/$sid" ]; then
+                    mv ".$working_dir/$sid" "$checked/"
+                fi
+            fi
+        fi
+    done < marks.csv
+}
+
+move_directories
