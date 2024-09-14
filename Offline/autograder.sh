@@ -144,6 +144,11 @@ fi
 
 plagiarism_analysis_file=$(remove_spaces "${lines[9]}")
 
+if ! find ".$plagiarism_analysis_file" -maxdepth 0 -type f > /dev/null 2>&1; then
+    echo "Error: File '$plagiarism_analysis_file' does not exist."
+    exit 1
+fi
+
 plagiarism_penalty=$(remove_spaces "${lines[10]}")
 
 if ! check_positive_number "$plagiarism_penalty" "Plagiarism Penalty" ; then
@@ -213,6 +218,7 @@ compile_and_run_c() {
     gcc "$submission_file" -o "$sid_dir/$sid.out"
     if [ $? -eq 0 ]; then
         "$sid_dir/$sid.out" > "$output_file"
+		rm "$sid_dir/$sid.out"
     else
         echo "Compilation error for C file $submission_file" > "$output_file"
     fi
@@ -227,6 +233,7 @@ compile_and_run_cpp() {
     g++ "$submission_file" -o "$sid_dir/$sid.out"
     if [ $? -eq 0 ]; then
         "$sid_dir/$sid.out" > "$output_file"
+		rm "$sid_dir/$sid.out"
     else
         echo "Compilation error for C++ file $submission_file" > "$output_file"
     fi
@@ -276,7 +283,6 @@ run_submission_file() {
     esac
     return 0
 }
-
 
 for (( sid = sid_low; sid <= sid_high; sid++ )); do
 	if [[ "$use_archive" == "true" ]]; then
