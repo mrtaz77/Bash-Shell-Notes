@@ -223,38 +223,82 @@ marks_deducted_for_plagiarism() {
     fi
 }
 
+process_submission_file() {
+    local submission_file="$1"
+    local submission_dir="$2"
+    local sid="$3"
+    local file_extension="$4"
+
+    check_programming_language "$file_extension"
+
+    if [ $? -eq 1 ]; then
+        run_submission_file "$submission_file" "$sid" "$file_extension"
+
+        local output_file="$submission_dir/${sid}_output.txt"
+        local deductions=$(compare_output "$output_file")
+        local final_marks=$((total_marks - deductions - submission_rules_violations))
+        local deduction_for_plagiarism=$(marks_deducted_for_plagiarism "$sid")
+        local total_deductions=$((deductions + submission_rules_violations + deduction_for_plagiarism))
+
+        echo -n "$final_marks,$total_deductions,$total_marks," >> marks.csv
+
+        if [[ $deductions -ne 0 ]]; then
+            add_to_remarks "'unmatched/non-existent output'"
+        fi
+        if [[ $deduction_for_plagiarism -ne 0 ]]; then
+            add_to_remarks "'plagiarism detected'"
+        fi
+    else
+        handle_not_allowed_programming_language
+    fi
+}
+
+handle_submission() {
+    local sid="$1"
+    local submission_dir="$2"
+    local submission_file="$3"
+
+    local file_extension=$(get_file_extension "$submission_file")
+    process_submission_file "$submission_file" "$submission_dir" "$sid" "$file_extension"
+}
+
 handle_extracted_files() {
-	local sid="$1"
+    local sid="$1"
     local working_dir="$2"
     local extracted_dir=".$working_dir/$sid"
 
     if [ -d "$extracted_dir" ]; then
-        local submission_file=$(find "$extracted_dir" -maxdepth 1 -name "$sid.*" -print -quit)
+        local submission_file=$(find "$extracted_dir" -type f -name "$sid.*" -print -quit)
+
         if [ -n "$submission_file" ]; then
-            file_extension=$(get_file_extension "$submission_file")
-            check_programming_language "$file_extension"
-            if [ $? -eq 1 ]; then
-                run_submission_file "$extracted_dir/$(basename "$submission_file")" "$sid" "$file_extension"
-				deductions=$(compare_output ".$working_dir/$sid/${sid}_output.txt")
-				final_marks=$((total_marks - deductions))
-				deduction_for_plagiarism=$(marks_deducted_for_plagiarism "$sid")
-				total_deductions=$((deductions + deduction_for_plagiarism))
-				echo -n "$final_marks,$total_deductions,$total_marks," >> marks.csv
-				if [[ $deductions -ne 0 ]]; then
-					add_to_remarks "'unmatched/non-existent output'"
-				fi
-				if [[ $deduction_for_plagiarism -ne 0 ]]; then
-					add_to_remarks "'plagiarism detected'"
-				fi
-			else
-                handle_not_allowed_programming_language
-            fi
+            local file_extension=$(get_file_extension "$submission_file")
+            process_submission_file "$submission_file" "$extracted_dir" "$sid" "$file_extension"
         else
             echo "No valid submission file found in the extracted directory for Student ID: $sid."
         fi
     else
         echo "No directory created for Student ID: $sid after extraction."
     fi
+}
+
+handle_non_archive_submission() {
+	local sid="$1"
+	local working_dir="$2"
+	local sid_dir=".$working_dir/$sid"
+
+	if [ ! -d "$sid_dir" ]; then
+		mkdir -p "$sid_dir"
+	fi
+
+	submission_file=$(find ".$working_dir" -maxdepth 1 -name "$sid.*" -print -quit)
+
+	if [ -z "$submission_file" ]; then
+		handle_missing_submission "$sid"
+		return
+	fi
+
+	mv "$submission_file" "$sid_dir/"
+	handle_submission "$sid" "$sid_dir" "$submission_file"
 }
 
 compile_and_run_c() {
@@ -448,53 +492,41 @@ for (( sid = sid_low; sid <= sid_high; sid++ )); do
         fi
 
         case "$file_extension" in
-            zip)
-                unzip "$archive_file" -d ".$working_dir" > /dev/null
-                ;;
-            rar)
-                unrar x "$archive_file" ".$working_dir" > /dev/null
-                ;;
-            tar)
-                tar -xvf "$archive_file" -C ".$working_dir" > /dev/null
-                ;;
-        esac
+			zip)
+				if unzip -l "$archive_file" | grep -qw "$sid/" > /dev/null; then
+					unzip "$archive_file" -d ".$working_dir" > /dev/null
+				else
+					mkdir -p ".$working_dir/$sid"
+					unzip "$archive_file" -d ".$working_dir/$sid" > /dev/null
+					add_to_submission_rules_violations
+					add_to_remarks "'issue case#4'"
+				fi
+				;;
+			rar)
+				if unrar l "$archive_file" | grep -qE "d.* $sid"; then
+					unrar x "$archive_file" ".$working_dir" > /dev/null
+				else
+					mkdir -p ".$working_dir/$sid"
+					unrar x "$archive_file" ".$working_dir/$sid" > /dev/null
+					add_to_submission_rules_violations
+					add_to_remarks "'issue case#4'"
+				fi
+				;;
+			tar)
+				if tar -tf "$archive_file" | grep -qw "$sid/" > /dev/null; then
+					tar -xvf "$archive_file" -C ".$working_dir" > /dev/null
+				else
+					mkdir -p ".$working_dir/$sid"
+					tar -xvf "$archive_file" -C ".$working_dir/$sid" > /dev/null
+					add_to_submission_rules_violations
+					add_to_remarks "'issue case#4'"
+				fi
+				;;
+		esac
 
         handle_extracted_files "$sid" "$working_dir"
-
 	else
-		sid_dir=".$working_dir/$sid"
-		if [ ! -d "$sid_dir" ]; then
-			mkdir -p "$sid_dir"
-		fi
-
-		submission_file=$(find ".$working_dir" -maxdepth 1 -name "$sid.*" -print -quit)
-
-		if [ -z "$submission_file" ]; then
-			handle_missing_submission "$sid"
-			continue
-		fi
-
-		mv "$submission_file" "$sid_dir/"
-
-		file_extension=$(get_file_extension "$submission_file")
-
-		check_programming_language "$file_extension"
-		if [ $? -eq 1 ]; then
-			run_submission_file "$sid_dir/$(basename "$submission_file")" "$sid" "$file_extension"
-			deductions=$(compare_output ".$working_dir/$sid/${sid}_output.txt")
-			final_marks=$((total_marks - deductions))
-			deduction_for_plagiarism=$(marks_deducted_for_plagiarism "$sid")
-			total_deductions=$((deductions + deduction_for_plagiarism))
-			echo -n "$final_marks,$total_deductions,$total_marks," >> marks.csv
-			if [[ $deductions -ne 0 ]]; then
-				add_to_remarks "'unmatched/non-existent output'"
-			fi
-			if [[ $deduction_for_plagiarism -ne 0 ]]; then
-				add_to_remarks "'plagiarism detected'"
-			fi
-		else
-			handle_not_allowed_programming_language
-		fi
+		handle_non_archive_submission "$sid" "$working_dir"
 	fi
 	echo -n "$remarks" >> marks.csv
 	clear_remarks
