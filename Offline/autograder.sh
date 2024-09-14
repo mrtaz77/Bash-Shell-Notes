@@ -192,7 +192,8 @@ handle_extracted_files() {
             check_programming_language "$file_extension"
             if [ $? -eq 1 ]; then
                 echo "Valid submission for Student ID: $sid with language: $file_extension"
-            else
+				run_submission_file "$extracted_dir/$(basename "$submission_file")" "$sid" "$file_extension"
+			else
                 echo "Invalid programming language for Student ID: $sid. Expected one of: ${allowed_valid_programming_languages[*]}."
             fi
         else
@@ -202,6 +203,80 @@ handle_extracted_files() {
         echo "No directory created for Student ID: $sid after extraction."
     fi
 }
+
+compile_and_run_c() {
+    local submission_file="$1"
+    local sid_dir="$2"
+    local sid="$3"
+    local output_file="$sid_dir/${sid}__output.txt"
+    
+    gcc "$submission_file" -o "$sid_dir/$sid.out"
+    if [ $? -eq 0 ]; then
+        "$sid_dir/$sid.out" > "$output_file"
+    else
+        echo "Compilation error for C file $submission_file" > "$output_file"
+    fi
+}
+
+compile_and_run_cpp() {
+    local submission_file="$1"
+    local sid_dir="$2"
+    local sid="$3"
+    local output_file="$sid_dir/${sid}__output.txt"
+    
+    g++ "$submission_file" -o "$sid_dir/$sid.out"
+    if [ $? -eq 0 ]; then
+        "$sid_dir/$sid.out" > "$output_file"
+    else
+        echo "Compilation error for C++ file $submission_file" > "$output_file"
+    fi
+}
+
+run_python_file() {
+    local submission_file="$1"
+    local sid_dir="$2"
+    local sid="$3"
+    local output_file="$sid_dir/${sid}__output.txt"
+    
+    python3 "$submission_file" > "$output_file" 2>&1
+}
+
+run_shell_file() {
+    local submission_file="$1"
+    local sid_dir="$2"
+    local sid="$3"
+    local output_file="$sid_dir/${sid}__output.txt"
+    
+    bash "$submission_file" > "$output_file" 2>&1
+}
+
+run_submission_file() {
+    local submission_file="$1"
+    local sid="$2"
+    local file_extension="$3"
+    local sid_dir=".$working_dir/$sid"
+    
+    case "$file_extension" in
+        "c")
+            compile_and_run_c "$submission_file" "$sid_dir" "$sid"
+            ;;
+        "cpp")
+            compile_and_run_cpp "$submission_file" "$sid_dir" "$sid"
+            ;;
+        "py")
+            run_python_file "$submission_file" "$sid_dir" "$sid"
+            ;;
+        "sh")
+            run_shell_file "$submission_file" "$sid_dir" "$sid"
+            ;;
+        *)
+            echo "Unsupported programming language: $file_extension" > "$sid_dir/${sid}__output.txt"
+            return 1
+            ;;
+    esac
+    return 0
+}
+
 
 for (( sid = sid_low; sid <= sid_high; sid++ )); do
 	if [[ "$use_archive" == "true" ]]; then
@@ -256,6 +331,7 @@ for (( sid = sid_low; sid <= sid_high; sid++ )); do
 		check_programming_language "$file_extension"
 		if [ $? -eq 1 ]; then
 			echo "Valid submission for Student ID: $sid with language: $file_extension"
+			run_submission_file "$sid_dir/$(basename "$submission_file")" "$sid" "$file_extension"
 		else
 			echo "Invalid programming language for Student ID: $sid. Expected one of: ${allowed_valid_programming_languages[*]}."
 			continue
