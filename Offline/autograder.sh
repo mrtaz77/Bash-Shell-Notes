@@ -93,9 +93,9 @@ for language in "${programming_languages[@]}"; do
     fi
 done
 
-full_score=$(remove_spaces "${lines[3]}")
+total_marks=$(remove_spaces "${lines[3]}")
 
-if ! check_positive_number "$full_score" "Full Score" ; then
+if ! check_positive_number "$total_marks" "Total Marks" ; then
     exit 1
 fi
 
@@ -111,8 +111,6 @@ if ! find "$working_dir" -maxdepth 0 -type d > /dev/null 2>&1; then
     echo "Error: Directory '$working_dir' does not exist."
     exit 1
 fi
-
-echo "$working_dir"
 
 sid_range="${lines[6]}"
 
@@ -149,18 +147,19 @@ if ! find ".$plagiarism_analysis_file" -maxdepth 0 -type f > /dev/null 2>&1; the
     exit 1
 fi
 
-plagiarism_penalty=$(remove_spaces "${lines[10]}")
+plagiarism_penalty_percentage=$(remove_spaces "${lines[10]}")
 
-if ! check_positive_number "$plagiarism_penalty" "Plagiarism Penalty" ; then
+if ! check_positive_number "$plagiarism_penalty_percentage" "Plagiarism Penalty Percentage" ; then
     exit 1
 fi
+
+plagiarism_penalty=$((total_marks * plagiarism_penalty_percentage / 100))
 
 make_marks_csv() {
 	column_names="id,marks,marks_deducted,total_marks,remarks"
 	echo "$column_names" > marks.csv
 }
 
-make_marks_csv
 
 check_programming_language() {
     local file_extension="$1"
@@ -192,6 +191,16 @@ check_archive_format() {
     return 1
 }
 
+marks_deducted_for_plagiarism() {
+    local sid="$1"
+
+    if grep -qw "$sid" ".$plagiarism_analysis_file"; then
+        echo "$plagiarism_penalty_percentage"
+    else
+        echo 0
+    fi
+}
+
 handle_extracted_files() {
 	local sid="$1"
     local working_dir="$2"
@@ -203,8 +212,12 @@ handle_extracted_files() {
             file_extension=$(get_file_extension "$submission_file")
             check_programming_language "$file_extension"
             if [ $? -eq 1 ]; then
-                echo "Valid submission for Student ID: $sid with language: $file_extension"
-				run_submission_file "$extracted_dir/$(basename "$submission_file")" "$sid" "$file_extension"
+                run_submission_file "$extracted_dir/$(basename "$submission_file")" "$sid" "$file_extension"
+				deductions=$(compare_output ".$working_dir/$sid/${sid}_output.txt")
+				final_marks=$((total_marks - deductions))
+				deduction_for_plagiarism=$(marks_deducted_for_plagiarism "$sid")
+				deductions=$((deductions + deduction_for_plagiarism))
+				echo -n "$final_marks,$deductions,$total_marks," >> marks.csv
 			else
                 echo "Invalid programming language for Student ID: $sid. Expected one of: ${allowed_valid_programming_languages[*]}."
             fi
@@ -220,7 +233,7 @@ compile_and_run_c() {
     local submission_file="$1"
     local sid_dir="$2"
     local sid="$3"
-    local output_file="$sid_dir/${sid}__output.txt"
+    local output_file="$sid_dir/${sid}_output.txt"
     
     gcc "$submission_file" -o "$sid_dir/$sid.out"
     if [ $? -eq 0 ]; then
@@ -235,7 +248,7 @@ compile_and_run_cpp() {
     local submission_file="$1"
     local sid_dir="$2"
     local sid="$3"
-    local output_file="$sid_dir/${sid}__output.txt"
+    local output_file="$sid_dir/${sid}_output.txt"
     
     g++ "$submission_file" -o "$sid_dir/$sid.out"
     if [ $? -eq 0 ]; then
@@ -250,7 +263,7 @@ run_python_file() {
     local submission_file="$1"
     local sid_dir="$2"
     local sid="$3"
-    local output_file="$sid_dir/${sid}__output.txt"
+    local output_file="$sid_dir/${sid}_output.txt"
     
     python3 "$submission_file" > "$output_file" 2>&1
 }
@@ -259,7 +272,7 @@ run_shell_file() {
     local submission_file="$1"
     local sid_dir="$2"
     local sid="$3"
-    local output_file="$sid_dir/${sid}__output.txt"
+    local output_file="$sid_dir/${sid}_output.txt"
     
     bash "$submission_file" > "$output_file" 2>&1
 }
@@ -284,14 +297,56 @@ run_submission_file() {
             run_shell_file "$submission_file" "$sid_dir" "$sid"
             ;;
         *)
-            echo "Unsupported programming language: $file_extension" > "$sid_dir/${sid}__output.txt"
+            echo "Unsupported programming language: $file_extension" > "$sid_dir/${sid}_output.txt"
             return 1
             ;;
     esac
     return 0
 }
 
+compare_output() {
+    local generated_output_file="$1"
+    local total_deductions=0
+
+    if [ ! -f "$generated_output_file" ]; then
+        echo "Generated output file '$generated_output_file' not found. Deducting full marks."
+        echo "$total_marks"
+        return 0
+    fi
+
+    process_file() {
+        local file="$1"
+        local result=""
+
+        while IFS= read -r line; do
+            # Remove trailing CRLF or LF
+            result+="${line//[$'\r']/}"
+            result+=$'\n'
+        done < "$file"
+
+        echo "$result"
+    }
+
+    local processed_expected
+    local processed_generated
+
+    processed_expected=$(process_file ".$expected_output_file")
+    processed_generated=$(process_file "$generated_output_file")
+
+    local diff_output
+    diff_output=$(diff <(echo "$processed_expected") <(echo "$processed_generated"))
+
+    local missing_lines
+    missing_lines=$(echo "$diff_output" | grep '^<' | wc -l)
+
+    total_deductions=$((missing_lines * unmatched_non_existent_penalty))
+
+    echo "$total_deductions"
+    return 0
+}
+
 for (( sid = sid_low; sid <= sid_high; sid++ )); do
+	echo -n "$sid," >> marks.csv
 	if [[ "$use_archive" == "true" ]]; then
 		archive_file=$(find ".$working_dir" -maxdepth 1 -name "$sid.*" -print -quit)
 		if [ -z "$archive_file" ]; then
@@ -319,6 +374,7 @@ for (( sid = sid_low; sid <= sid_high; sid++ )); do
         esac
 
         handle_extracted_files "$sid" "$working_dir"
+
 	else
 		sid_dir=".$working_dir/$sid"
 		if [ ! -d "$sid_dir" ]; then
@@ -343,11 +399,14 @@ for (( sid = sid_low; sid <= sid_high; sid++ )); do
 
 		check_programming_language "$file_extension"
 		if [ $? -eq 1 ]; then
-			echo "Valid submission for Student ID: $sid with language: $file_extension"
 			run_submission_file "$sid_dir/$(basename "$submission_file")" "$sid" "$file_extension"
+			deductions=$(compare_output ".$working_dir/$sid/${sid}_output.txt")
+			final_marks=$((total_marks - deductions))
+			echo -n "$final_marks,$deductions,$total_marks," >> marks.csv
 		else
 			echo "Invalid programming language for Student ID: $sid. Expected one of: ${allowed_valid_programming_languages[*]}."
 			continue
 		fi
 	fi
+	echo "" >> marks.csv
 done
