@@ -394,7 +394,6 @@ run_submission_file() {
 
 compare_output() {
     local generated_output_file="$1"
-    local total_deductions=0
 
     if [ ! -f "$generated_output_file" ]; then
         echo "Generated output file '$generated_output_file' not found. Deducting full marks."
@@ -402,31 +401,18 @@ compare_output() {
         return 0
     fi
 
-    process_file() {
-        local file="$1"
-        local result=""
-
-        while IFS= read -r line; do
-            result+="${line//[$'\r']/}"
-            result+=$'\n'
-        done < "$file"
-
-        echo "$result"
+    line_exists() {
+        local line="$1"
+        local file="$2"
+        grep -Fxq "$line" "$file"
     }
 
-    local processed_expected
-    local processed_generated
-
-    processed_expected=$(process_file ".$expected_output_file")
-    processed_generated=$(process_file "$generated_output_file")
-
-    local diff_output
-    diff_output=$(diff <(echo "$processed_expected") <(echo "$processed_generated"))
-
-    local missing_lines
-    missing_lines=$(echo "$diff_output" | grep '^<' | wc -l)
-
-    total_deductions=$((missing_lines * unmatched_non_existent_penalty))
+    local total_deductions=0
+    while IFS= read -r expected_line; do
+        if ! line_exists "$expected_line" "$generated_output_file"; then
+            total_deductions=$((total_deductions + unmatched_non_existent_penalty))
+        fi
+    done < ".$expected_output_file"
 
     echo "$total_deductions"
     return 0
@@ -453,7 +439,7 @@ handle_not_allowed_archive_format() {
 handle_not_allowed_programming_language() {
 	add_to_submission_rules_violations
 	add_to_remarks "'issue case #3'"
-	echo -n "-$submission_rules_violations,$submission_rules_violations,$total_marks" >> marks.csv
+	echo -n "-$submission_rules_violations,$submission_rules_violations,$total_marks," >> marks.csv
 	clear_submission_rules_violations
 }
 
