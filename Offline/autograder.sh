@@ -276,7 +276,6 @@ handle_submission() {
     local sid="$1"
     local submission_dir="$2"
     local submission_file="$3"
-
     local file_extension=$(get_file_extension "$submission_file")
     process_submission_file "$submission_file" "$submission_dir" "$sid" "$file_extension"
 }
@@ -317,7 +316,8 @@ handle_non_archive_submission() {
 	fi
 
 	mv "$submission_file" "$sid_dir/"
-	handle_submission "$sid" "$sid_dir" "$submission_file"
+	local new_submission_file="$sid_dir/$(basename "$submission_file")"
+    handle_submission "$sid" "$sid_dir" "$new_submission_file"
 }
 
 compile_and_run_c() {
