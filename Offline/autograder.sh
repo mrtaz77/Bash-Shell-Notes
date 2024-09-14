@@ -102,7 +102,7 @@ if ! check_positive_number "$unmatched_non_existent_penalty" "Penalty for Unmatc
     exit 1
 fi
 
-working_dir=$(remove_spaces "${lines[5]}")
+working_dir=./$(remove_spaces "${lines[5]}")
 
 if ! find "$working_dir" -maxdepth 0 -type d > /dev/null 2>&1; then
     echo "Error: Directory '$working_dir' does not exist."
@@ -124,9 +124,9 @@ elif [[ "$sid_low" -gt "$sid_high" ]]; then
 	echo "Invalid Student ID range; first Student ID is greater than last Student ID"
 fi
 
-expected_output_file=$(remove_spaces "${lines[7]}")
+expected_output_file=./$(remove_spaces "${lines[7]}")
 
-if ! find ".$expected_output_file" -maxdepth 0 -type f > /dev/null 2>&1; then
+if ! find "$expected_output_file" -maxdepth 0 -type f > /dev/null 2>&1; then
     echo "Error: File '$expected_output_file' does not exist."
     exit 1
 fi
@@ -137,9 +137,9 @@ if ! check_positive_number "$violation_penalty" "Penalty for Submission Guidelin
     exit 1
 fi
 
-plagiarism_analysis_file=$(remove_spaces "${lines[9]}")
+plagiarism_analysis_file=./$(remove_spaces "${lines[9]}")
 
-if ! find ".$plagiarism_analysis_file" -maxdepth 0 -type f > /dev/null 2>&1; then
+if ! find "$plagiarism_analysis_file" -maxdepth 0 -type f > /dev/null 2>&1; then
     echo "Error: File '$plagiarism_analysis_file' does not exist."
     exit 1
 fi
@@ -232,7 +232,7 @@ check_archive_format() {
 marks_deducted_for_plagiarism() {
     local sid="$1"
 
-    if grep -qw "$sid" ".$plagiarism_analysis_file"; then
+    if grep -qw "$sid" "$plagiarism_analysis_file"; then
         echo "$plagiarism_penalty"
     else
         echo 0
@@ -256,13 +256,16 @@ process_submission_file() {
         local deduction_for_plagiarism=$(marks_deducted_for_plagiarism "$sid")
         local total_deductions=$((deductions + submission_rules_violations + deduction_for_plagiarism))
 
-        echo -n "$final_marks,$total_deductions,$total_marks," >> marks.csv
+        echo -n "$final_marks,$total_deductions," >> marks.csv
 
         if [[ $deductions -ne 0 ]]; then
             add_to_remarks "'unmatched/non-existent output'"
         fi
         if [[ $deduction_for_plagiarism -ne 0 ]]; then
+			echo -n "-$plagiarism_penalty," >> marks.csv 
             add_to_remarks "'plagiarism detected'"
+		else
+			echo -n "$total_marks," >> marks.csv
         fi
     else
         handle_not_allowed_programming_language
@@ -281,7 +284,7 @@ handle_submission() {
 handle_extracted_files() {
     local sid="$1"
     local working_dir="$2"
-    local extracted_dir=".$working_dir/$sid"
+    local extracted_dir="$working_dir/$sid"
 
     if [ -d "$extracted_dir" ]; then
         local submission_file=$(find "$extracted_dir" -type f -name "$sid.*" -print -quit)
@@ -300,13 +303,13 @@ handle_extracted_files() {
 handle_non_archive_submission() {
 	local sid="$1"
 	local working_dir="$2"
-	local sid_dir=".$working_dir/$sid"
+	local sid_dir="$working_dir/$sid"
 
 	if [ ! -d "$sid_dir" ]; then
 		mkdir -p "$sid_dir"
 	fi
 
-	submission_file=$(find ".$working_dir" -maxdepth 1 -name "$sid.*" -print -quit)
+	submission_file=$(find "$working_dir" -maxdepth 1 -name "$sid.*" -print -quit)
 
 	if [ -z "$submission_file" ]; then
 		handle_missing_submission "$sid"
@@ -369,7 +372,7 @@ run_submission_file() {
     local submission_file="$1"
     local sid="$2"
     local file_extension="$3"
-    local sid_dir=".$working_dir/$sid"
+    local sid_dir="$working_dir/$sid"
     
     case "$file_extension" in
         "c")
@@ -412,7 +415,7 @@ compare_output() {
         if ! line_exists "$expected_line" "$generated_output_file"; then
             total_deductions=$((total_deductions + unmatched_non_existent_penalty))
         fi
-    done < ".$expected_output_file"
+    done < "$expected_output_file"
 
     echo "$total_deductions"
     return 0
@@ -459,7 +462,7 @@ is_valid_sid() {
 }
 
 handle_invalid_entries() {
-    for entry in ".$working_dir"/*; do
+    for entry in "$working_dir"/*; do
         if [ -e "$entry" ]; then
             local basename=$(basename "$entry")
             local basename_no_ext="${basename%.*}"
@@ -475,12 +478,12 @@ handle_invalid_entries
 for (( sid = sid_low; sid <= sid_high; sid++ )); do
 	echo -n "$sid," >> marks.csv
 
-	if [ -d ".$working_dir/$sid" ]; then
+	if [ -d "$working_dir/$sid" ]; then
 		add_to_submission_rules_violations
 		add_to_remarks "'issue case #1'"
 		handle_extracted_files "$sid" "$working_dir"
 	elif [[ "$use_archive" == "true" ]]; then
-		archive_file=$(find ".$working_dir" -maxdepth 1 -name "$sid.*" -print -quit)
+		archive_file=$(find "$working_dir" -maxdepth 1 -name "$sid.*" -print -quit)
 		if [ -z "$archive_file" ]; then
             handle_missing_submission
             continue
@@ -496,30 +499,30 @@ for (( sid = sid_low; sid <= sid_high; sid++ )); do
         case "$file_extension" in
 			zip)
 				if unzip -l "$archive_file" | grep -qw "$sid/" > /dev/null; then
-					unzip "$archive_file" -d ".$working_dir" > /dev/null
+					unzip "$archive_file" -d "$working_dir" > /dev/null
 				else
-					mkdir -p ".$working_dir/$sid"
-					unzip "$archive_file" -d ".$working_dir/$sid" > /dev/null
+					mkdir -p "$working_dir/$sid"
+					unzip "$archive_file" -d "$working_dir/$sid" > /dev/null
 					add_to_submission_rules_violations
 					add_to_remarks "'issue case #4'"
 				fi
 				;;
 			rar)
 				if unrar l "$archive_file" | grep -qE "d.* $sid"; then
-					unrar x "$archive_file" ".$working_dir" > /dev/null
+					unrar x "$archive_file" "$working_dir" > /dev/null
 				else
-					mkdir -p ".$working_dir/$sid"
-					unrar x "$archive_file" ".$working_dir/$sid" > /dev/null
+					mkdir -p "$working_dir/$sid"
+					unrar x "$archive_file" "$working_dir/$sid" > /dev/null
 					add_to_submission_rules_violations
 					add_to_remarks "'issue case #4'"
 				fi
 				;;
 			tar)
 				if tar -tf "$archive_file" | grep -qw "$sid/" > /dev/null; then
-					tar -xvf "$archive_file" -C ".$working_dir" > /dev/null
+					tar -xvf "$archive_file" -C "$working_dir" > /dev/null
 				else
-					mkdir -p ".$working_dir/$sid"
-					tar -xvf "$archive_file" -C ".$working_dir/$sid" > /dev/null
+					mkdir -p "$working_dir/$sid"
+					tar -xvf "$archive_file" -C "$working_dir/$sid" > /dev/null
 					add_to_submission_rules_violations
 					add_to_remarks "'issue case #4'"
 				fi
@@ -545,16 +548,16 @@ move_directories() {
         remarks=$(echo "$remarks" | xargs)
         if is_sid_in_range "$sid"; then
             if [[ "$remarks" =~ issue\ case\ #[134] ]]; then
-                if [ -d ".$working_dir/$sid" ]; then
-                    mv ".$working_dir/$sid" "$issues/"
+                if [ -d "$working_dir/$sid" ]; then
+                    mv "$working_dir/$sid" "$issues/"
                 fi
             elif [[ "$remarks" =~ issue\ case\ #2 ]]; then
-                if ls ".$working_dir/$sid"* 1> /dev/null 2>&1; then
-                    mv ".$working_dir/$sid"* "$issues/"
+                if ls "$working_dir/$sid"* 1> /dev/null 2>&1; then
+                    mv "$working_dir/$sid"* "$issues/"
                 fi
             else
-                if [ -d ".$working_dir/$sid" ]; then
-                    mv ".$working_dir/$sid" "$checked/"
+                if [ -d "$working_dir/$sid" ]; then
+                    mv "$working_dir/$sid" "$checked/"
                 fi
             fi
         fi
