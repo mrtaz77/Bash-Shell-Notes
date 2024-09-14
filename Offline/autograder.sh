@@ -22,13 +22,11 @@ get_file_extension() {
 	echo "$file_extension"
 }
 
-# Check for correct number of arguments
 if [ "$#" -ne 2 ]; then
 	echo "Usage: $0 -i <config-file-name>"
 	exit 1
 fi
 
-# Check for correct first argument
 if [ "$1" != "-i" ]; then
     echo "Invalid option: $1"
     echo "Usage: $0 -i filename"
@@ -37,7 +35,6 @@ fi
 
 file="$2"
 
-# Check for file
 if [ ! -f "$file" ]; then
 	echo "File not found: $file"
 	exit 1
@@ -160,6 +157,31 @@ make_marks_csv() {
 	echo "$column_names" > marks.csv
 }
 
+make_marks_csv
+submission_rules_violations=0
+remarks=""
+
+add_to_submission_rules_violations () {
+	submission_rules_violations=$((submission_rules_violations + violation_penalty))
+}
+
+clear_submission_rules_violations() {
+	submission_rules_violations=0
+}
+
+add_to_remarks() {
+    local input="$1"
+    
+    if [ -z "$remarks" ]; then
+        remarks="$input"
+    else
+        remarks="$remarks $input"
+    fi
+}
+
+clear_remarks() {
+    remarks=""
+}
 
 check_programming_language() {
     local file_extension="$1"
@@ -195,7 +217,7 @@ marks_deducted_for_plagiarism() {
     local sid="$1"
 
     if grep -qw "$sid" ".$plagiarism_analysis_file"; then
-        echo "$plagiarism_penalty_percentage"
+        echo "$plagiarism_penalty"
     else
         echo 0
     fi
@@ -216,10 +238,16 @@ handle_extracted_files() {
 				deductions=$(compare_output ".$working_dir/$sid/${sid}_output.txt")
 				final_marks=$((total_marks - deductions))
 				deduction_for_plagiarism=$(marks_deducted_for_plagiarism "$sid")
-				deductions=$((deductions + deduction_for_plagiarism))
-				echo -n "$final_marks,$deductions,$total_marks," >> marks.csv
+				total_deductions=$((deductions + deduction_for_plagiarism))
+				echo -n "$final_marks,$total_deductions,$total_marks," >> marks.csv
+				if [[ $deductions -ne 0 ]]; then
+					add_to_remarks "'unmatched/non-existent output'"
+				fi
+				if [[ $deduction_for_plagiarism -ne 0 ]]; then
+					add_to_remarks "'plagiarism detected'"
+				fi
 			else
-                echo "Invalid programming language for Student ID: $sid. Expected one of: ${allowed_valid_programming_languages[*]}."
+                handle_not_allowed_programming_language
             fi
         else
             echo "No valid submission file found in the extracted directory for Student ID: $sid."
@@ -319,7 +347,6 @@ compare_output() {
         local result=""
 
         while IFS= read -r line; do
-            # Remove trailing CRLF or LF
             result+="${line//[$'\r']/}"
             result+=$'\n'
         done < "$file"
@@ -345,20 +372,79 @@ compare_output() {
     return 0
 }
 
+add_new_line_to_marks_csv() {
+	echo "" >> marks.csv
+}
+
+handle_missing_submission() {
+	echo -n "0,0,$total_marks,'missing submission'" >> marks.csv
+	add_new_line_to_marks_csv
+}
+
+handle_not_allowed_archive_format() {
+	add_to_submission_rules_violations
+	add_to_remarks "'issue case #2'"
+	echo -n "-$submission_rules_violations,$submission_rules_violations,$total_marks,$remarks" >> marks.csv
+	clear_remarks
+	clear_submission_rules_violations
+	add_new_line_to_marks_csv
+}
+
+handle_not_allowed_programming_language() {
+	add_to_submission_rules_violations
+	add_to_remarks "'issue case #3'"
+	echo -n "-$submission_rules_violations,$submission_rules_violations,$total_marks" >> marks.csv
+	clear_submission_rules_violations
+}
+
+is_valid_sid() {
+    local basename="$1"
+    local basename_no_ext="${basename%.*}"
+    local expected_output_basename_no_ext="$(basename "${expected_output_file%.*}")"
+    local plagiarism_analysis_basename_no_ext="$(basename "${plagiarism_analysis_file%.*}")"
+    if [[ "$basename_no_ext" == "$expected_output_basename_no_ext" || "$basename_no_ext" == "$plagiarism_analysis_basename_no_ext" ]]; then
+        return 0
+    fi
+    if [[ "$basename_no_ext" =~ ^[0-9]+$ ]] && (( basename_no_ext >= sid_low && basename_no_ext <= sid_high )); then
+        return 0
+    else
+        return 1
+    fi
+}
+
+handle_invalid_entries() {
+    for entry in ".$working_dir"/*; do
+        if [ -e "$entry" ]; then
+            local basename=$(basename "$entry")
+            local basename_no_ext="${basename%.*}"
+            if ! is_valid_sid "$basename"; then
+                echo "$basename_no_ext,-$violation_penalty,$violation_penalty,$total_marks,'issue case #5'" >> marks.csv
+            fi
+        fi
+    done
+}
+
+handle_invalid_entries
+
 for (( sid = sid_low; sid <= sid_high; sid++ )); do
 	echo -n "$sid," >> marks.csv
-	if [[ "$use_archive" == "true" ]]; then
+
+	if [ -d ".$working_dir/$sid" ]; then
+		add_to_submission_rules_violations
+		add_to_remarks "'issue case #1'"
+		handle_extracted_files "$sid" "$working_dir"
+	elif [[ "$use_archive" == "true" ]]; then
 		archive_file=$(find ".$working_dir" -maxdepth 1 -name "$sid.*" -print -quit)
 		if [ -z "$archive_file" ]; then
-            echo "No archive file found for Student ID: $sid"
+            handle_missing_submission
             continue
         fi
 
         file_extension=$(get_file_extension "$archive_file")
 
         if ! check_archive_format "$file_extension"; then
-            echo "Invalid archive format for Student ID: $sid. Expected one of: ${allowed_valid_archived_formats[*]}."
-            continue
+            handle_not_allowed_archive_format
+			continue
         fi
 
         case "$file_extension" in
@@ -384,16 +470,11 @@ for (( sid = sid_low; sid <= sid_high; sid++ )); do
 		submission_file=$(find ".$working_dir" -maxdepth 1 -name "$sid.*" -print -quit)
 
 		if [ -z "$submission_file" ]; then
-			echo "No submission file found for Student ID: $sid"
+			handle_missing_submission "$sid"
 			continue
 		fi
 
-		mv "$submission_file" "$sid_dir/" 2>/dev/null
-
-		if [ $? -ne 0 ]; then
-			echo "Error moving submission file for Student ID: $sid"
-			continue
-		fi
+		mv "$submission_file" "$sid_dir/"
 
 		file_extension=$(get_file_extension "$submission_file")
 
@@ -402,11 +483,20 @@ for (( sid = sid_low; sid <= sid_high; sid++ )); do
 			run_submission_file "$sid_dir/$(basename "$submission_file")" "$sid" "$file_extension"
 			deductions=$(compare_output ".$working_dir/$sid/${sid}_output.txt")
 			final_marks=$((total_marks - deductions))
-			echo -n "$final_marks,$deductions,$total_marks," >> marks.csv
+			deduction_for_plagiarism=$(marks_deducted_for_plagiarism "$sid")
+			total_deductions=$((deductions + deduction_for_plagiarism))
+			echo -n "$final_marks,$total_deductions,$total_marks," >> marks.csv
+			if [[ $deductions -ne 0 ]]; then
+				add_to_remarks "'unmatched/non-existent output'"
+			fi
+			if [[ $deduction_for_plagiarism -ne 0 ]]; then
+				add_to_remarks "'plagiarism detected'"
+			fi
 		else
-			echo "Invalid programming language for Student ID: $sid. Expected one of: ${allowed_valid_programming_languages[*]}."
-			continue
+			handle_not_allowed_programming_language
 		fi
 	fi
-	echo "" >> marks.csv
+	echo -n "$remarks" >> marks.csv
+	clear_remarks
+	add_new_line_to_marks_csv
 done
