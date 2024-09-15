@@ -544,7 +544,7 @@ is_sid_in_range() {
 }
 
 move_directories() {
-    while IFS=, read -r sid final_marks total_deductions total_marks remarks; do
+    while IFS=, read -r sid marks total_deductions total_marks remarks; do
         remarks=$(echo "$remarks" | xargs)
         if is_sid_in_range "$sid"; then
             if [[ "$remarks" =~ issue\ case\ #3 ]]; then
