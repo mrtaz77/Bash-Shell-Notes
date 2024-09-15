@@ -401,33 +401,20 @@ compare_output() {
     local total_deductions=0
 
     if [ ! -f "$generated_output_file" ]; then
-        echo "Generated output file '$generated_output_file' not found. Deducting full marks."
         echo "$total_marks"
         return 0
     fi
 
-    process_file() {
-        local file="$1"
-        local result=""
+	mapfile -t expected_output_lines < "$expected_output_file"
 
-        while IFS= read -r line; do
-            # Remove trailing CRLF or LF
-            result+="${line//[$'\r']/}"
-            result+=$'\n'
-        done < "$file"
+	missing_line_count=0
+    for line in "${expected_output_lines[@]}"; do
+		if ! grep -Fxq "$line" "$generated_output_file"; then
+			missing_line_count=$((missing_line_count + 1))
+		fi
+	done
 
-        echo "$result"
-    }
-
-    processed_expected=$(process_file "$expected_output_file")
-    processed_generated=$(process_file "$generated_output_file")
-
-    diff_output=$(diff <(echo "$processed_expected") <(echo "$processed_generated"))
-
-    missing_lines=$(echo "$diff_output" | grep '^<' | wc -l)
-
-
-    total_deductions=$((missing_lines * unmatched_non_existent_penalty))
+    total_deductions=$((missing_line_count * unmatched_non_existent_penalty))
 
     echo "$total_deductions"
     return 0
