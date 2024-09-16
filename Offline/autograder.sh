@@ -33,14 +33,14 @@ if [ "$1" != "-i" ]; then
     exit 1
 fi
 
-file="$2"
+input_file="$2"
 
-if [ ! -f "$file" ]; then
-	echo "File not found: $file"
+if [ ! -f "$input_file" ]; then
+	echo "Input file not found: $input_file"
 	exit 1
 fi
 
-IFS=$'\n' read -d '' -r -a lines < $file
+IFS=$'\n' read -d '' -r -a lines < $input_file
 
 use_archive=$(remove_spaces "${lines[0]}")
 
@@ -450,7 +450,8 @@ is_valid_sid() {
     local basename_no_ext="${basename%.*}"
     local expected_output_basename_no_ext="$(basename "${expected_output_file%.*}")"
     local plagiarism_analysis_basename_no_ext="$(basename "${plagiarism_analysis_file%.*}")"
-    if [[ "$basename_no_ext" == "$expected_output_basename_no_ext" || "$basename_no_ext" == "$plagiarism_analysis_basename_no_ext" || "$basename_no_ext" == "issues" || "$basename_no_ext" == "checked" ]]; then
+	local input_file_basename_no_ext="$(basename "${input_file%.*}")"
+    if [[ "$basename_no_ext" == "$expected_output_basename_no_ext" || "$basename_no_ext" == "$plagiarism_analysis_basename_no_ext" || "$basename_no_ext" == "issues" || "$basename_no_ext" == "checked" || "$basename_no_ext" == "$input_file_basename_no_ext" ]]; then
         return 0
     fi
     if [[ "$basename_no_ext" =~ ^[0-9]+$ ]] && (( basename_no_ext >= sid_low && basename_no_ext <= sid_high )); then
