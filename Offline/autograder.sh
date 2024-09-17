@@ -330,7 +330,7 @@ compile_and_run_c() {
     gcc "$submission_file" -o "$sid_dir/$sid.out"
     if [ $? -eq 0 ]; then
         "$sid_dir/$sid.out" > "$output_file"
-		rm "$sid_dir/$sid.out"
+		# rm "$sid_dir/$sid.out"
     else
         echo "Compilation error for C file $submission_file" > "$output_file"
     fi
@@ -345,7 +345,7 @@ compile_and_run_cpp() {
     g++ "$submission_file" -o "$sid_dir/$sid.out"
     if [ $? -eq 0 ]; then
         "$sid_dir/$sid.out" > "$output_file"
-		rm "$sid_dir/$sid.out"
+		# rm "$sid_dir/$sid.out"
     else
         echo "Compilation error for C++ file $submission_file" > "$output_file"
     fi
