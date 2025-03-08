@@ -1,4 +1,4 @@
-# Bash-Shell
+# Bash-Shell-Notes
 Codes and Assignments on bash
 
 ## Contents
