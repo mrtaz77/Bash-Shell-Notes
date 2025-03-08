@@ -3,10 +3,24 @@ Codes and Assignments on bash
 
 ## Contents
 - Lab Exercises
-  - Week #1
-    - 1
-    - 2
-  - Week #3
+  - <table>
+        <tr>
+          <th>Week#</th>
+          <th>Exercise</th>
+        </tr>
+        <tr>
+          <td rowspan="2">1</td>
+          <td><a href="/Lab/Week1/exercise1/">1</a></td>
+        </tr>
+        <tr>
+          <td><a href="/Lab/Week1/exercise2/">2</a></td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td><a href="/Lab/Week3/">File Comparison</a></td>
+        </tr>
+      </table>  
+    
 - Offline
   - [Assignment](/Offline/Bash%20Scripting%20Assignment_%20Autograder%20Design.pdf)
   - [Submission](/Offline/autograder.sh)
